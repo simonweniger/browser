@@ -29,8 +29,11 @@ struct WindowControls: View {
 }
 
 struct WindowControlButton: View {
+    @Environment(\.window) private var window
+
     let type: WindowControlType
     @Binding var isHovered: Bool
+    @State private var isWindowFocused = true
 
     private var buttonSize: CGFloat {
         if #available(macOS 26.0, *) {
@@ -48,17 +51,41 @@ struct WindowControlButton: View {
         }
     }
 
+    private var imageName: String {
+        guard isWindowFocused else { return "no-focus" }
+        return isHovered ? "\(assetBaseName)-hover" : "\(assetBaseName)-normal"
+    }
+
+    private var imageOpacity: Double {
+        isWindowFocused ? 1.0 : 0.25
+    }
+
     var body: some View {
-        Image(isHovered ? "\(assetBaseName)-hover" : "\(assetBaseName)-normal")
+        Image(imageName)
             .resizable()
             .frame(width: buttonSize, height: buttonSize)
+            .opacity(imageOpacity)
+            .onAppear {
+                syncWindowFocus()
+            }
+            .onChange(of: window) { _, _ in
+                syncWindowFocus()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
+                guard notification.object as? NSWindow === window else { return }
+                isWindowFocused = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { notification in
+                guard notification.object as? NSWindow === window else { return }
+                isWindowFocused = false
+            }
             .onTapGesture {
                 performAction()
             }
     }
 
     private func performAction() {
-        guard let window = NSApp.keyWindow else { return }
+        guard let window else { return }
         switch type {
         case .close:
             window.performClose(nil)
@@ -67,5 +94,9 @@ struct WindowControlButton: View {
         case .zoom:
             window.toggleFullScreen(nil)
         }
+    }
+
+    private func syncWindowFocus() {
+        isWindowFocused = window?.isKeyWindow ?? false
     }
 }
